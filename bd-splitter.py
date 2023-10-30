@@ -4,6 +4,7 @@ import argparse
 import arrow
 import json
 import logging
+import re
 import os
 from os.path import join, getsize
 from pathlib import Path
@@ -69,10 +70,14 @@ logging.debug(f"Excluding the following directory names/patterns: {exclude_list}
 directories = {}
 scan_dirs = {}
 
-
 def in_exclude_list(abs_path):
-    return any([abs_path.match(e) for e in exclude_list])
-
+    is_excluded = False
+    for e in exclude_list:
+        regex_hit = re.search(e, abs_path.as_posix())
+        if regex_hit is not None:
+            is_excluded = True
+            break
+    return is_excluded
 
 #
 # Analyze the folder tree from the bottom up
@@ -149,7 +154,8 @@ logging.debug(f"scan_dirs: {scan_dirs}")
 hub_instance_kwargs = {
     "api_token": args.api_token,
     "insecure": True,
-    "debug": False
+    "write_config_flag": False,
+    "debug": True
 }
 
 hub = HubInstance(args.bd_url, **hub_instance_kwargs)  # Need a HubInstance to use the BD REST API
@@ -160,6 +166,11 @@ hub = HubInstance(args.bd_url, **hub_instance_kwargs)  # Need a HubInstance to u
 # therefore including matches that don't apply anymore
 #
 version = hub.get_or_create_project_version(args.project, args.version)
+
+if version is None:
+    logging.error("Could not create version in remote API. Verify your project has not reached the version limit: https://community.synopsys.com/s/article/Black-Duck-HUB-Why-is-there-a-version-limit-of-10-for-projects")
+    sys.exit(1)
+
 code_locations_url = hub.get_link(version, "codelocations")
 code_locations_count = 1
 while code_locations_count > 0:
